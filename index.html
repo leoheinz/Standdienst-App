@@ -434,10 +434,8 @@
     }
 
     function clearOrder() {
-      if (confirm("Aktuelle Bestellung wirklich löschen?")) {
-        order = {};
-        render();
-      }
+      order = {};
+      render();
     }
 
     function deleteItem(index) {
