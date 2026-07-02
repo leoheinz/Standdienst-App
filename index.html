@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kneipen-Kasse</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: #f4f4f4;
+      color: #222;
+    }
+
+    h1, h2 {
+      margin-top: 0;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: white;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    input {
+      font-size: 18px;
+      padding: 12px;
+      margin: 6px 0;
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+
+    button {
+      font-size: 18px;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    .add-button {
+      width: 100%;
+      background: #1976d2;
+      color: white;
+      margin-top: 8px;
+    }
+
+    .items {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+    }
+
+    .item-button {
+      background: #2e7d32;
+      color: white;
+      min-height: 70px;
+    }
+
+    .item-button.negative {
+      background: #c62828;
+    }
+
+    .order-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+      align-items: center;
+    }
+
+    .order-row button {
+      font-size: 14px;
+      padding: 6px 10px;
+      background: #ddd;
+    }
+
+    .total {
+      font-size: 28px;
+      font-weight: bold;
+      text-align: right;
+      margin-top: 16px;
+    }
+
+    .danger {
+      background: #b71c1c;
+      color: white;
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .secondary {
+      background: #666;
+      color: white;
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .small {
+      font-size: 14px;
+      color: #666;
+    }
+
+    .admin-list {
+      margin-top: 12px;
+    }
+
+    .admin-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+    }
+
+    .delete-button {
+      background: #c62828;
+      color: white;
+      font-size: 14px;
+      padding: 8px 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Kneipen-Kasse</h1>
+
+    <div class="card">
+      <h2>Artikel</h2>
+      <div id="items" class="items"></div>
+    </div>
+
+    <div class="card">
+      <h2>Aktuelle Bestellung</h2>
+      <div id="order"></div>
+      <div class="total" id="total">0,00 €</div>
+      <button class="danger" onclick="clearOrder()">Bestellung löschen</button>
+    </div>
+
+    <div class="card">
+      <h2>Neuen Artikel anlegen</h2>
+      <input id="itemName" type="text" placeholder="Name, z. B. Bier" />
+      <input id="itemPrice" type="number" step="0.01" placeholder="Preis, z. B. 3.50 oder -1.00" />
+      <button class="add-button" onclick="addItem()">Artikel hinzufügen</button>
+      <p class="small">
+        Tipp: Für Pfand-Rückgabe einen negativen Preis anlegen, z. B. „Pfand zurück“ mit -1.00.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Artikel verwalten</h2>
+      <div id="adminList" class="admin-list"></div>
+      <button class="secondary" onclick="resetDefaultItems()">Beispielartikel laden</button>
+    </div>
+  </div>
+
+  <script>
+    let items = JSON.parse(localStorage.getItem("items")) || [];
+    let order = JSON.parse(localStorage.getItem("order")) || {};
+
+    function save() {
+      localStorage.setItem("items", JSON.stringify(items));
+      localStorage.setItem("order", JSON.stringify(order));
+    }
+
+    function formatPrice(value) {
+      return value.toLocaleString("de-DE", {
+        style: "currency",
+        currency: "EUR"
+      });
+    }
+
+    function renderItems() {
+      const itemsDiv = document.getElementById("items");
+      itemsDiv.innerHTML = "";
+
+      if (items.length === 0) {
+        itemsDiv.innerHTML = "<p>Noch keine Artikel angelegt.</p>";
+        return;
+      }
+
+      items.forEach((item, index) => {
+        const button = document.createElement("button");
+        button.className = "item-button" + (item.price < 0 ? " negative" : "");
+        button.innerHTML = `${item.name}<br>${formatPrice(item.price)}`;
+        button.onclick = () => addToOrder(index);
+        itemsDiv.appendChild(button);
+      });
+    }
+
+    function renderOrder() {
+      const orderDiv = document.getElementById("order");
+      orderDiv.innerHTML = "";
+
+      let total = 0;
+      const orderIndexes = Object.keys(order);
+
+      if (orderIndexes.length === 0) {
+        orderDiv.innerHTML = "<p>Keine Artikel ausgewählt.</p>";
+      }
+
+      orderIndexes.forEach(index => {
+        const item = items[index];
+        if (!item) return;
+
+        const quantity = order[index];
+        const lineTotal = item.price * quantity;
+        total += lineTotal;
+
+        const row = document.createElement("div");
+        row.className = "order-row";
+        row.innerHTML = `
+          <div>
+            <strong>${quantity}x ${item.name}</strong><br>
+            <span>${formatPrice(item.price)} / Stück = ${formatPrice(lineTotal)}</span>
+          </div>
+          <div>
+            <button onclick="decreaseItem(${index})">-</button>
+            <button onclick="addToOrder(${index})">+</button>
+          </div>
+        `;
+        orderDiv.appendChild(row);
+      });
+
+      document.getElementById("total").textContent = formatPrice(total);
+    }
+
+    function renderAdminList() {
+      const adminList = document.getElementById("adminList");
+      adminList.innerHTML = "";
+
+      if (items.length === 0) {
+        adminList.innerHTML = "<p>Keine Artikel vorhanden.</p>";
+        return;
+      }
+
+      items.forEach((item, index) => {
+        const row = document.createElement("div");
+        row.className = "admin-row";
+        row.innerHTML = `
+          <div>${item.name} – ${formatPrice(item.price)}</div>
+          <button class="delete-button" onclick="deleteItem(${index})">Löschen</button>
+        `;
+        adminList.appendChild(row);
+      });
+    }
+
+    function render() {
+      renderItems();
+      renderOrder();
+      renderAdminList();
+      save();
+    }
+
+    function addItem() {
+      const nameInput = document.getElementById("itemName");
+      const priceInput = document.getElementById("itemPrice");
+
+      const name = nameInput.value.trim();
+      const price = parseFloat(priceInput.value.replace(",", "."));
+
+      if (!name) {
+        alert("Bitte einen Namen eingeben.");
+        return;
+      }
+
+      if (isNaN(price)) {
+        alert("Bitte einen gültigen Preis eingeben.");
+        return;
+      }
+
+      items.push({ name, price });
+
+      nameInput.value = "";
+      priceInput.value = "";
+
+      render();
+    }
+
+    function addToOrder(index) {
+      order[index] = (order[index] || 0) + 1;
+      render();
+    }
+
+    function decreaseItem(index) {
+      if (!order[index]) return;
+
+      order[index]--;
+
+      if (order[index] <= 0) {
+        delete order[index];
+      }
+
+      render();
+    }
+
+    function clearOrder() {
+      if (confirm("Aktuelle Bestellung wirklich löschen?")) {
+        order = {};
+        render();
+      }
+    }
+
+    function deleteItem(index) {
+      if (!confirm("Artikel wirklich löschen?")) return;
+
+      items.splice(index, 1);
+
+      const newOrder = {};
+      Object.keys(order).forEach(oldIndex => {
+        oldIndex = parseInt(oldIndex);
+
+        if (oldIndex < index) {
+          newOrder[oldIndex] = order[oldIndex];
+        } else if (oldIndex > index) {
+          newOrder[oldIndex - 1] = order[oldIndex];
+        }
+      });
+
+      order = newOrder;
+      render();
+    }
+
+    function resetDefaultItems() {
+      if (!confirm("Beispielartikel laden? Bestehende Artikel werden ersetzt.")) return;
+
+      items = [
+        { name: "Bier", price: 3.50 },
+        { name: "Wein", price: 4.00 },
+        { name: "Wasser", price: 2.50 },
+        { name: "Pfand zurück", price: -1.00 }
+      ];
+
+      order = {};
+      render();
+    }
+
+    render();
+  </script>
+</body>
+</html>
